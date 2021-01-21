@@ -80,6 +80,7 @@ def read_raw_log(file):
 					current_title = attribute[6:]
 				elif "List:" == attribute[:5]:
 					current_list = attribute[5:]
+					current_list = current_list[1:-1].split(", ")
 				elif "Stacks:" == attribute[:7]:
 					current_stacks = attribute[7:]
 				elif '\n' != attribute:
@@ -117,6 +118,8 @@ def read_raw_log(file):
 					current_activity = attribute[15:]
 				elif "List:" == attribute[:5]:
 					current_list = attribute[5:]
+					current_list = current_list[1:-1].split(", ")
+
 				elif '\n' != attribute:
 					print("Warning Unknow data:" + attribute)
 
@@ -140,7 +143,20 @@ def read_raw_log(file):
 def sort_raw_list(raw_list):
 	return sorted(raw_list, key = lambda x:(x["TimeStamp"],x["Type"]) )
 
-def create_windows(raw_list, index):
+def Check_Menu(temp_link, window_list):
+	if 'x' not in temp_link or 'y' not in temp_link:
+		return False
+	current_text = Get_Text_FromViewTree(temp_link)
+	for window in window_list:
+		if window["Type"] == "Menu":
+			if "List" in window:
+				for ti in window["List"]:
+					if current_text == ti:
+						#It is a click on a menu
+						return True
+	return False
+
+def create_windows(raw_list, index, window_list, temp_link):
 	'''
 	Windows
 	1: Type {Dialog, Menu, Activity}
@@ -149,11 +165,18 @@ def create_windows(raw_list, index):
 	source_dict = raw_list[index]
 	if (index > 0):
 		if raw_list[index-1]["Type"] == "LongClick":
-			if index > 1:
+			if window_list!=None and temp_link!=None and Check_Menu(temp_link, window_list):
+				# It is on a menu window
+				window_dict["Type"] = "Menu"
+				window_dict["Content"] = source_dict["Activity"]
+				return window_dict
+			elif index > 1:
+				# It is on a dialog window
 				if raw_list[index-2]["Type"] == "Dialog":
 					window_dict["Type"] = "Dialog"
 					window_dict["Content"] = raw_list[index-2]["Title"]
 					return window_dict
+			# It is on a activity window
 			window_dict["Type"] = "Activity"
 			window_dict["Content"] = source_dict["Activity"]
 			return window_dict
@@ -161,9 +184,14 @@ def create_windows(raw_list, index):
 	j = index + 1
 	if (j >= len(raw_list) or raw_list[j]["Type"] == '#' or raw_list[j]["Type"] == 'Mannul'):
 		# if i >= length of list, it is last link 
-		if source_dict["Event"] == "MENU":
-			# it is a Menu window
+		if window_list!=None and temp_link!=None and Check_Menu(temp_link, window_list):
+			# It is on a menu window
 			window_dict["Type"] = "Menu"
+			window_dict["Content"] = source_dict["Activity"]
+			return window_dict
+		elif source_dict["Event"] == "MENU":
+			# it invoke system event Menu 
+			window_dict["Type"] = "Activity"
 			window_dict["Content"] = source_dict["Activity"]
 		else:
 			# it is a Activity window
@@ -174,8 +202,8 @@ def create_windows(raw_list, index):
 		window_dict["Type"] = "Dialog"
 		window_dict["Content"] = raw_list[j]["Title"]
 	elif (raw_list[j]["Type"] == "OptionsMenu"):
-		# it is a Menu window
-		window_dict["Type"] = "Menu"
+		# it generate a optionsmenu
+		window_dict["Type"] = "Activity"
 		window_dict["Content"] = source_dict["Activity"]
 	else:
 		print("Warning no window found at:" + str(source_dict) )
@@ -230,23 +258,67 @@ def Get_ViewTree(temp_link):
 		print("==================================")
 		return "NONE"
 
-def identify_link(raw_list, i, last_dict, current_dict, current_type, last_timestamp):
+def ViewTree_Recursion_Text(tree,x,y):
+	viewtree = None
+	for child in tree:
+		temp = child.attrib["bounds"].split("][")[0][1:]
+		x1 = int(temp.split(',')[0])
+		y1 = int(temp.split(',')[1])
+		temp = child.attrib["bounds"].split("][")[1][:-1]
+		x2 = int(temp.split(',')[0])
+		y2 = int(temp.split(',')[1])
+
+		if (x1<=x and x2>=x and y1<=y and y2>=y):
+			viewtree = ViewTree_Recursion_Text(child,x,y)
+			if viewtree == None:
+				if ("text" in child.attrib):
+
+					return child.attrib["text"]
+				else:
+					return ""
+			else:
+				return viewtree
+	if ("text" in tree.attrib):
+
+		return tree.attrib["text"]
+	else:
+		return ""
+
+def Get_Text_FromViewTree(temp_link):
+	try:
+		mytree = ET.parse(gt_xml_dirs + app_name + os.path.sep + str(temp_link["TimeStamp"]) + ".xml")
+		myroot = mytree.getroot()
+		x = temp_link['x']
+		y = temp_link['y']
+		if (x==-1 or y==-1):
+			return ""
+		viewtree = ViewTree_Recursion_Text(myroot,x,y)
+		return viewtree
+	except FileNotFoundError:
+		print("==================================")
+		print("Error: This XML file not found" + gt_xml_dirs + app_name + os.path.sep + str(temp_link["TimeStamp"]) + ".xml")
+		print("Belong to this edge")
+		print(temp_link)
+		print("==================================")
+		return "NONE"
+
+def Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp):
 	link = {}
-	if "Widget" in last_dict:
+	if "Widget" in current_dict:
 		# last_dict is not Mannul
 		link["Type"] = current_type
-		for k in last_dict:
+		for k in current_dict:
 			if k == "TimeStamp":
 				link[k] = last_timestamp
 				last_timestamp = current_dict["TimeStamp"]
 			elif k == "Widget":
-				link[k] = last_dict[k]
+				link[k] = current_dict[k]
 			elif k == "WidgetID":
-				link[k] = last_dict[k]
+				link[k] = current_dict[k]
 			elif k == 'x':
-				link[k] = last_dict[k]
+				link[k] = current_dict[k]
 			elif k == 'y':
-				link[k] = last_dict[k]		
+				link[k] = current_dict[k]		
 	else:
 		# last_dict is Mannul
 		link["Type"] = "Mannul"
@@ -257,6 +329,13 @@ def identify_link(raw_list, i, last_dict, current_dict, current_type, last_times
 
 	return link,last_timestamp
 
+def Identify_Window(window_list, last_window):
+	i = 0
+	for key in window_list:
+		if key["Type"] == last_window["Type"] and key["Content"] == last_window["Content"]:
+			return i
+		i = i + 1
+	return -1
 def create_links(raw_list):
 	''' There are 8 types of links can exploit from Promal, 
 		including #, # with Event Back, #+Dialog, #+Dialog+LongClick, #+LongClick, # with Event Menu, # with Event Menu+OptionsMenu, Mannul
@@ -279,7 +358,7 @@ def create_links(raw_list):
 	else:
 		current_type = "NONE"
 	
-	last_window = create_windows(raw_list, 0)
+	last_window = create_windows(raw_list, 0, None, None)
 	c_window_list.append(last_window)
 
 	last_timestamp = last_dict["TimeStamp"]
@@ -293,20 +372,23 @@ def create_links(raw_list):
 			# new link
 			if (raw_list[i-1]["Type"] == "LongClick"):
 				current_type = "LongClick"
-			temp_link, last_timestamp = identify_link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
-			
+			temp_link, last_timestamp = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
 			temp_link["SourceWindow"] = last_window
-			last_window = create_windows(raw_list, i)
+			last_window = create_windows(raw_list, i, c_window_list, temp_link)
 			temp_link["TargetWindow"] = last_window
-			last_dict = current_dict
-			if  temp_link["Type"]!="Mannul" :
+			
+			if temp_link["Type"]!="Mannul":
 				viewtree = Get_ViewTree(temp_link)
 				temp_link["ViewTree"] = viewtree
 
-			if last_window not in c_window_list:
+			last_dict = current_dict
+
+			# Identify if this window already in list
+			if Identify_Window(c_window_list, last_window) == -1:
 				c_window_list.append(last_window)
 			if Check_Link(temp_link, c_edge_list):
 				c_edge_list.append(temp_link)
+
 
 			if current_dict["Event"] == "BACK":
 				current_type = "Back"
@@ -322,7 +404,23 @@ def create_links(raw_list):
 				#quit()
 			# it isn't a link
 			#last_timestamp = current_dict["TimeStamp"]
-		elif current_dict["Type"] == "OptionsMenu":
+		elif current_dict["Type"] == "OptionsMenu" or current_dict["Type"] == "ContextMenu":
+
+			menu_window = {"Type":"Menu", "Content":current_dict["Activity"],"List": current_dict["List"]}
+			index_w = Identify_Window(c_window_list, menu_window)
+			if index_w == -1:
+				c_window_list.append(menu_window)
+			else:
+				last_menu = c_window_list.pop(index_w)
+				if "List" in last_menu:
+					last_list = last_menu["List"]
+				else:
+					last_list = []
+				menu_list = menu_window["List"]
+				for ti in last_list:
+					if not ti in menu_list:
+						menu_list.append(ti)
+				c_window_list.append(menu_window)
 			# it isn't a link, its timestamp will be same as previous one
 			#last_timestamp = current_dict["TimeStamp"]
 			i = i
@@ -332,16 +430,17 @@ def create_links(raw_list):
 
 		elif current_dict["Type"] == "Mannul":
 			# new link
-			temp_link, last_timestamp = identify_link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
+			temp_link, last_timestamp = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
 			temp_link["SourceWindow"] = last_window
-			last_window = create_windows(raw_list, i)
+			last_window = create_windows(raw_list, i, c_window_list, temp_link)
 			temp_link["TargetWindow"] = last_window
 			last_dict = current_dict
 			if  temp_link["Type"]!="Mannul" :
 				viewtree = Get_ViewTree(temp_link)
 				temp_link["ViewTree"] = viewtree
 
-			if last_window not in c_window_list:
+			# Identify if this window already in list
+			if Identify_Window(c_window_list, last_window) == -1:
 				c_window_list.append(last_window)
 			if Check_Link(temp_link, c_edge_list):
 				c_edge_list.append(temp_link)
@@ -371,6 +470,8 @@ for current_dir in gt_dirs:
 			current_raw_list = read_raw_log(current_dir + file)
 			current_raw_list = sort_raw_list(current_raw_list)
 			edge_list,window_list = create_links(current_raw_list);
+			
+			
 			
 '''				# Dialog edges
 				if ("Dialog" == attributes[0]):
