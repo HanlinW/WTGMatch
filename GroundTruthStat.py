@@ -1,6 +1,6 @@
 import os
 import xml.etree.ElementTree as ET
-gt_dirs = ["/Users/hanlinwang/Desktop/thesis3/NEW/WTGProject/PythonServer/all_data/GT/test/"]
+gt_dirs = ["/Users/hanlinwang/Desktop/thesis3/NEW/WTGProject/PythonServer/all_data/GT/GT_Log/"]
 gt_xml_dirs = "/Users/hanlinwang/Desktop/thesis3/NEW/WTGProject/PythonServer/all_data/XML/"
 paladin_dirs = [""]
 
@@ -214,10 +214,6 @@ def create_windows(raw_list, index, window_list, temp_link):
 			window_dict["Content"] = source_dict["Activity"]
 
 			return window_dict
-		elif source_dict["Event"] == "MENU":
-			# it invoke system event Menu 
-			window_dict["Type"] = "Activity"
-			window_dict["Content"] = source_dict["Activity"]
 		else:
 			# it is a Activity window
 			window_dict["Type"] = "Activity"
@@ -517,8 +513,6 @@ for current_dir in gt_dirs:
 			current_raw_list = sort_raw_list(current_raw_list)
 			edge_list,window_list = create_links(current_raw_list);
 			
-			
-			print(window_list)
 '''				# Dialog edges
 				if ("Dialog" == attributes[0]):
 					title_bool = False
