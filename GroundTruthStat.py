@@ -332,18 +332,18 @@ def Get_Text_FromViewTree(temp_link):
 		print("==================================")
 		return "NONE"
 
-def Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp, last_timestamp2):
-	if last_timestamp2 == -1:
+def Identify_Link(raw_list, i, last_dict, current_dict, last_type, last_timestamp, last_timestamp2):
+	if last_timestamp2 == -1 or last_type =="Mannul":
 		# it is first link
 		last_timestamp2 = last_timestamp
 		last_timestamp = current_dict["TimeStamp"]
 		return {}, last_timestamp, last_timestamp2
 
 	link = {}
-	if "Widget" in current_dict:
+	if "Widget" in last_dict:
 		# last_dict is not Mannul
-		link["Type"] = current_type
-		for k in current_dict:
+		link["Type"] = last_type
+		for k in last_dict:
 			if k == "TimeStamp":
 				link[k] = last_timestamp2
 				last_timestamp2 = last_timestamp
@@ -358,12 +358,20 @@ def Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_times
 				link[k] = last_dict[k]		
 	else:
 		# last_dict is Mannul
-		link["Type"] = "Mannul"
+		link["Type"] = last_type
 		for k in last_dict:
 			if k == "TimeStamp":
 				link[k] = last_timestamp2
 				last_timestamp2 = last_timestamp
 				last_timestamp = current_dict["TimeStamp"]
+			elif k == "Widget":
+				link[k] = last_dict[k]
+			elif k == "WidgetID":
+				link[k] = last_dict[k]
+			elif k == 'x':
+				link[k] = last_dict[k]
+			elif k == 'y':
+				link[k] = last_dict[k]					
 
 	return link, last_timestamp, last_timestamp2
 
@@ -401,6 +409,8 @@ def create_links(raw_list):
 
 	last_timestamp = last_dict["TimeStamp"]
 	last_timestamp2 = -1
+
+	last_type = "Mannul"
 	i = 1
 	#print(last_dict)
 	while (i < len(raw_list)):
@@ -411,12 +421,15 @@ def create_links(raw_list):
 			# new link
 			if current_dict["Event"] == "BACK":
 				current_type = "Back"			
+			elif current_dict["Event"] =="MENU":
+				current_type = "Menu"
 			elif (raw_list[i-1]["Type"] == "LongClick"):
 				current_type = "LongClick"
 			else:
 				current_type = "Click"	
 
-			temp_link, last_timestamp, last_timestamp2 = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp, last_timestamp2)
+
+			temp_link, last_timestamp, last_timestamp2 = Identify_Link(raw_list, i, last_dict, current_dict, last_type, last_timestamp, last_timestamp2)
 			if temp_link!={}:
 				# not first two lines
 				temp_link["SourceWindow"] = last_window
@@ -432,8 +445,10 @@ def create_links(raw_list):
 				# Identify if this window already in list
 				if Identify_Window(c_window_list, last_window) == -1:
 					c_window_list.append(last_window)
-
+			else:
+				last_window = create_windows(raw_list, i, c_window_list, temp_link)
 			last_dict = current_dict
+			last_type = current_type
 
 		elif current_dict["Type"] == "Dialog":
 			if (i+1 < len(raw_list)) and (raw_list[i+1]["Type"] == "LongClick"):
@@ -488,11 +503,11 @@ def create_links(raw_list):
 		elif current_dict["Type"] == "Mannul":
 			# it only supply target activity for pervious link and xml for next link
 			# not new link
-			#current_type is click
-			current_type = "Click"
+			#current_type is Mannul
+			current_type = "Mannul"
 			
 			last_timestamp = current_dict["TimeStamp"]
-			temp_link, last_timestamp, last_timestamp2 = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp, last_timestamp2)
+			temp_link, last_timestamp, last_timestamp2 = Identify_Link(raw_list, i, last_dict, current_dict, last_type, last_timestamp, last_timestamp2)
 			if temp_link!={}:
 				# not first two lines
 				temp_link["SourceWindow"] = last_window
@@ -505,7 +520,10 @@ def create_links(raw_list):
 				# Identify if this window already in list
 				if Identify_Window(c_window_list, last_window) == -1:
 					c_window_list.append(last_window)
+			else:
+				last_window = {"Type": "Activity", "Content": current_dict["Activity"]}
 
+			last_type = current_type
 		else:
 			print("Warning Unknow type:" + current_dict)
 
