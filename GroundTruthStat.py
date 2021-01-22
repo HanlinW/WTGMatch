@@ -1,6 +1,6 @@
 import os
 import xml.etree.ElementTree as ET
-gt_dirs = ["/Users/hanlinwang/Desktop/thesis3/NEW/WTGProject/PythonServer/all_data/GT/GT_Log/"]
+gt_dirs = ["/Users/hanlinwang/Desktop/thesis3/NEW/WTGProject/PythonServer/all_data/GT/test/"]
 gt_xml_dirs = "/Users/hanlinwang/Desktop/thesis3/NEW/WTGProject/PythonServer/all_data/XML/"
 paladin_dirs = [""]
 
@@ -368,7 +368,7 @@ def create_links(raw_list):
 	c_window_list = []
 	last_dict = raw_list[0]
 	if "Mannul" == last_dict["Type"]:
-		current_type = "Mannul"
+		current_type = "Click"
 	elif "#" == last_dict["Type"]:
 		if last_dict["Event"]!="NONE":
 			current_type = last_dict["Event"]
@@ -394,8 +394,13 @@ def create_links(raw_list):
 
 		if current_dict["Type"] == "#":
 			# new link
-			if (raw_list[i-1]["Type"] == "LongClick"):
+			if current_dict["Event"] == "BACK":
+				current_type = "Back"			
+			elif (raw_list[i-1]["Type"] == "LongClick"):
 				current_type = "LongClick"
+			else:
+				current_type = "Click"	
+
 			temp_link, last_timestamp = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
 			temp_link["SourceWindow"] = last_window
 			last_window = create_windows(raw_list, i, c_window_list, temp_link)
@@ -412,12 +417,6 @@ def create_links(raw_list):
 				c_window_list.append(last_window)
 			if Check_Link(temp_link, c_edge_list):
 				c_edge_list.append(temp_link)
-
-
-			if current_dict["Event"] == "BACK":
-				current_type = "Back"
-			else:
-				current_type = "Click"
 
 		elif current_dict["Type"] == "Dialog":
 			if (i+1 < len(raw_list)) and (raw_list[i+1]["Type"] == "LongClick"):
@@ -472,6 +471,9 @@ def create_links(raw_list):
 		elif current_dict["Type"] == "Mannul":
 			# it only supply target activity for pervious link and xml for next link
 			# not new link
+			#current_type is click
+			current_type = "Click"
+			
 			last_timestamp = current_dict["TimeStamp"]
 			temp_link, last_timestamp = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
 			temp_link["SourceWindow"] = last_window
@@ -485,9 +487,6 @@ def create_links(raw_list):
 			# Identify if this window already in list
 			if Identify_Window(c_window_list, last_window) == -1:
 				c_window_list.append(last_window)
-			
-			#current_type is click
-			current_type = "Click"
 		else:
 			print("Warning Unknow type:" + current_dict)
 
@@ -511,8 +510,7 @@ for current_dir in gt_dirs:
 			app_name = file[:-4]
 			current_raw_list = read_raw_log(current_dir + file)
 			current_raw_list = sort_raw_list(current_raw_list)
-			edge_list,window_list = create_links(current_raw_list);
-			
+			edge_list,window_list = create_links(current_raw_list)
 '''				# Dialog edges
 				if ("Dialog" == attributes[0]):
 					title_bool = False
