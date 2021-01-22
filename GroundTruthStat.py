@@ -154,13 +154,19 @@ def read_raw_log(file):
 		elif ("Mannul" == attributes[0]):
 			current_timestamp = int(attributes[1])
 			current_activity = ""
+			current_x = -1
+			current_y = -1
+			current_event = "Manul"
+			current_widget = ""
+			current_widgetID = ""
 			for attribute in attributes[2:len(attributes)]:
 				if "SourceActivity:" == attribute[:15]:
 					current_activity = attribute[15:]
 				elif '\n' != attribute:
 					print("Warning Unknow data:" + attribute)					
 
-			current_dict = 	dict( [("Type","Mannul"), ("TimeStamp",current_timestamp), ("Activity", current_activity), ("Event","NONE")] )
+			current_dict = 	dict( [("Type","Mannul"), ("TimeStamp",current_timestamp), ("Activity", current_activity), ("Event", current_event), ("x", current_x), ("y", current_y)
+				,("Widget", current_widget), ("WidgetID", current_widgetID)] )
 			raw_list.append(current_dict)
 	return raw_list
 
@@ -326,32 +332,40 @@ def Get_Text_FromViewTree(temp_link):
 		print("==================================")
 		return "NONE"
 
-def Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp):
+def Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp, last_timestamp2):
+	if last_timestamp2 == -1:
+		# it is first link
+		last_timestamp2 = last_timestamp
+		last_timestamp = current_dict["TimeStamp"]
+		return {}, last_timestamp, last_timestamp2
+
 	link = {}
 	if "Widget" in current_dict:
 		# last_dict is not Mannul
 		link["Type"] = current_type
 		for k in current_dict:
 			if k == "TimeStamp":
-				link[k] = last_timestamp
+				link[k] = last_timestamp2
+				last_timestamp2 = last_timestamp
 				last_timestamp = current_dict["TimeStamp"]
 			elif k == "Widget":
-				link[k] = current_dict[k]
+				link[k] = last_dict[k]
 			elif k == "WidgetID":
-				link[k] = current_dict[k]
+				link[k] = last_dict[k]
 			elif k == 'x':
-				link[k] = current_dict[k]
+				link[k] = last_dict[k]
 			elif k == 'y':
-				link[k] = current_dict[k]		
+				link[k] = last_dict[k]		
 	else:
 		# last_dict is Mannul
 		link["Type"] = "Mannul"
 		for k in last_dict:
 			if k == "TimeStamp":
-				link[k] = last_timestamp
+				link[k] = last_timestamp2
+				last_timestamp2 = last_timestamp
 				last_timestamp = current_dict["TimeStamp"]
 
-	return link,last_timestamp
+	return link, last_timestamp, last_timestamp2
 
 def Identify_Window(window_list, last_window):
 	i = 0
@@ -386,6 +400,7 @@ def create_links(raw_list):
 	c_window_list.append(last_window)
 
 	last_timestamp = last_dict["TimeStamp"]
+	last_timestamp2 = -1
 	i = 1
 	#print(last_dict)
 	while (i < len(raw_list)):
@@ -401,22 +416,24 @@ def create_links(raw_list):
 			else:
 				current_type = "Click"	
 
-			temp_link, last_timestamp = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
-			temp_link["SourceWindow"] = last_window
-			last_window = create_windows(raw_list, i, c_window_list, temp_link)
-			temp_link["TargetWindow"] = last_window
+			temp_link, last_timestamp, last_timestamp2 = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp, last_timestamp2)
+			if temp_link!={}:
+				# not first two lines
+				temp_link["SourceWindow"] = last_window
+				last_window = create_windows(raw_list, i, c_window_list, temp_link)
+				temp_link["TargetWindow"] = last_window
 			
-			if temp_link["Type"]!="Mannul":
-				viewtree = Get_ViewTree(temp_link)
-				temp_link["ViewTree"] = viewtree
+				if temp_link["Type"]!="Mannul":
+					viewtree = Get_ViewTree(temp_link)
+					temp_link["ViewTree"] = viewtree
+				# Check if this link already in list
+				if Check_Link(temp_link, c_edge_list):
+					c_edge_list.append(temp_link)
+				# Identify if this window already in list
+				if Identify_Window(c_window_list, last_window) == -1:
+					c_window_list.append(last_window)
 
 			last_dict = current_dict
-
-			# Identify if this window already in list
-			if Identify_Window(c_window_list, last_window) == -1:
-				c_window_list.append(last_window)
-			if Check_Link(temp_link, c_edge_list):
-				c_edge_list.append(temp_link)
 
 		elif current_dict["Type"] == "Dialog":
 			if (i+1 < len(raw_list)) and (raw_list[i+1]["Type"] == "LongClick"):
@@ -475,18 +492,20 @@ def create_links(raw_list):
 			current_type = "Click"
 			
 			last_timestamp = current_dict["TimeStamp"]
-			temp_link, last_timestamp = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp)
-			temp_link["SourceWindow"] = last_window
-			last_window = {"Type": "Activity", "Content": current_dict["Activity"]}
-			temp_link["TargetWindow"] = last_window
-			last_dict = current_dict
-			if  temp_link["Type"]!="Mannul" :
-				viewtree = Get_ViewTree(temp_link)
-				temp_link["ViewTree"] = viewtree
+			temp_link, last_timestamp, last_timestamp2 = Identify_Link(raw_list, i, last_dict, current_dict, current_type, last_timestamp, last_timestamp2)
+			if temp_link!={}:
+				# not first two lines
+				temp_link["SourceWindow"] = last_window
+				last_window = {"Type": "Activity", "Content": current_dict["Activity"]}
+				temp_link["TargetWindow"] = last_window
+				last_dict = current_dict
+				if  temp_link["Type"]!="Mannul" :
+					viewtree = Get_ViewTree(temp_link)
+					temp_link["ViewTree"] = viewtree
+				# Identify if this window already in list
+				if Identify_Window(c_window_list, last_window) == -1:
+					c_window_list.append(last_window)
 
-			# Identify if this window already in list
-			if Identify_Window(c_window_list, last_window) == -1:
-				c_window_list.append(last_window)
 		else:
 			print("Warning Unknow type:" + current_dict)
 
@@ -511,6 +530,7 @@ for current_dir in gt_dirs:
 			current_raw_list = read_raw_log(current_dir + file)
 			current_raw_list = sort_raw_list(current_raw_list)
 			edge_list,window_list = create_links(current_raw_list)
+			
 '''				# Dialog edges
 				if ("Dialog" == attributes[0]):
 					title_bool = False
